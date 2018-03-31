@@ -12,6 +12,10 @@
         stroke: black;
         stroke-width: 5px;
     }
+    .ct-series-d .ct-line {
+        stroke: blue;
+        stroke-width: 5px;
+    }
     .ct-series-0{
         color: red;
         font-size: 20;
@@ -24,29 +28,53 @@
         color: DarkOrange;
         font-size: 20;
     }
+    .ct-series-3{
+        color: blue;
+        font-size: 20;
+    }
 </style>
 <script>
 
 const bitmex = new WebSocket("wss://www.bitmex.com/realtime?subscribe=trade:XBTUSD")
 const binance = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade")
 const bitfinex = new WebSocket('wss://api.bitfinex.com/ws/2')
+const gdax = new WebSocket('wss://ws-feed.gdax.com')
+
+gdax.onopen = () => {
+    const subscribeMessage = {
+        type: 'subscribe',
+        product_ids: ['BTC-USD']
+    }
+    gdax.send(JSON.stringify(subscribeMessage))
+    const heartbeatMessage = {
+        type: 'heartbeat',
+        on: true,
+    }
+    gdax.send(JSON.stringify(heartbeatMessage))
+}
 
 bitfinex.onopen = () =>
-    bitfinex.send(JSON.stringify({"event":"subscribe", "channel":"trades", "pair":"BTCUSD"}));
+    bitfinex.send(JSON.stringify({
+        "event":"subscribe",
+        "channel":"trade",
+        "pair":"BTCUSD"
+    }))
 
 window.onload = function () {
 
     let binanceData = []
     let bitmexData = []
     let bitfinexData = []
+    let gdaxData = []
     const dataLength = 40
 
     const drawChart = () => new Chartist.Line('.ct-chart', {
         series: [
             { "name": "Bitmex XBT", "data": bitmexData },
             { "name": "Binance USDT", "data": binanceData },
-            { "name": "Bitfinex USD", "data": bitfinexData }
-             ],
+            { "name": "Bitfinex USD", "data": bitfinexData },
+            { "name": "GDAX USD", "data": gdaxData }
+        ],
     }, {
         fullWidth: true,
         height: 400,
@@ -80,8 +108,23 @@ window.onload = function () {
         }
     }
 
+    gdax.onmessage = event => {
+        const data = JSON.parse(event.data)
+        if ((data.type == "done" && data.reason == "filled")
+            || data.type == "match"
+            || data.type == "ticker") {
+            const price = data.price
+            const lastPrice = gdaxData[gdaxData.length - 1]
+            // filter some price anomalies
+            if (!(price > lastPrice + 300 || price < lastPrice - 300))
+                updatePrice(gdaxData, price)
+        }
+    }
+
+
     bitfinex.onmessage = event => {
         const data = JSON.parse(event.data)[2]
+        console.log(event.data)
         if (data) {
             const price = data[3]
             updatePrice(bitfinexData, price)
