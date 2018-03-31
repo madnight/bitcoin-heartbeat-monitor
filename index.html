@@ -1,0 +1,109 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.css">
+<script src="https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartist-plugin-legend/0.6.2/chartist-plugin-legend.min.js"></script>
+
+<div class="ct-chart"></div>
+<style>
+    .ct-label{
+        color: black;
+        font-size: 18;
+    }
+    .ct-series-b .ct-line {
+        stroke: black;
+        stroke-width: 5px;
+    }
+    .ct-series-0{
+        color: red;
+        font-size: 20;
+    }
+    .ct-series-1{
+        color: black;
+        font-size: 20;
+    }
+    .ct-series-2{
+        color: DarkOrange;
+        font-size: 20;
+    }
+</style>
+<script>
+
+const bitmex = new WebSocket("wss://www.bitmex.com/realtime?subscribe=trade:XBTUSD")
+const binance = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade")
+const bitfinex = new WebSocket('wss://api.bitfinex.com/ws/2')
+
+bitfinex.onopen = () =>
+    bitfinex.send(JSON.stringify({"event":"subscribe", "channel":"trades", "pair":"BTCUSD"}));
+
+window.onload = function () {
+
+    let binanceData = []
+    let bitmexData = []
+    let bitfinexData = []
+    const dataLength = 40
+
+    const drawChart = () => new Chartist.Line('.ct-chart', {
+        series: [
+            { "name": "Bitmex XBT", "data": bitmexData },
+            { "name": "Binance USDT", "data": binanceData },
+            { "name": "Bitfinex USD", "data": bitfinexData }
+             ],
+    }, {
+        fullWidth: true,
+        height: 400,
+        showPoint: false,
+        axisX: {
+            showGrid: false,
+            showLabel: false
+        },
+        chartPadding: {
+            top: 30,
+            bottom: 30,
+            right: 40,
+            left: 40
+        },
+        plugins: [
+            Chartist.plugins.legend()
+        ],
+        lineSmooth: Chartist.Interpolation.simple({
+            divisor: 10,
+            fillHoles: true
+        }),
+    })
+
+    const updatePrice = (data, price) => {
+        if (price) {
+            data.push(price)
+            if (data.length > dataLength) {
+                data.shift()
+            }
+            drawChart()
+        }
+    }
+
+    bitfinex.onmessage = event => {
+        const data = JSON.parse(event.data)[2]
+        if (data) {
+            const price = data[3]
+            updatePrice(bitfinexData, price)
+        }
+    }
+
+    binance.onmessage = event => {
+        const price = JSON.parse(event.data).p
+        if (price) {
+            updatePrice(binanceData, price)
+        }
+    }
+
+    bitmex.onmessage = event => {
+        const data = JSON.parse(event.data).data
+        if (data) {
+            const price = data[0].price
+            if (price) {
+                updatePrice(bitmexData, price)
+            }
+        }
+    }
+}
+</script>
+
